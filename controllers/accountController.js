@@ -71,13 +71,48 @@ const applyTradePnL = async (userId, pnl, tradeId) => {
 
   account.balance = parseFloat((account.balance + pnl).toFixed(2));
   account.history.push({
-    type:    "trade",
-    amount:  pnl,
+    type: "trade",
+    amount: pnl,
     balance: account.balance,
-    note:    `Trade P&L`,
+    note: `Trade P&L`,
     tradeId,
   });
   await account.save();
 };
 
-module.exports = { getAccount, setupBalance, deposit, withdrawal, applyTradePnL };
+// Called when a trade is deleted — reverses the P&L from balance
+const reverseTradePnL = async (userId, pnl, tradeId) => {
+  const account = await Account.findOne({ user: userId });
+  if (!account) return;
+
+  account.balance = parseFloat((account.balance - pnl).toFixed(2));
+  account.history.push({
+    type: "trade",
+    amount: -pnl,  // reverse the original pnl
+    balance: account.balance,
+    note: `Trade deleted (reversed)`,
+    tradeId,
+  });
+  await account.save();
+};
+
+// Called when a trade is updated — adjusts balance by the difference
+const adjustTradePnL = async (userId, oldPnl, newPnl, tradeId) => {
+  const account = await Account.findOne({ user: userId });
+  if (!account) return;
+
+  const diff = newPnl - oldPnl; // only apply the difference
+  if (diff === 0) return;       // nothing changed, skip
+
+  account.balance = parseFloat((account.balance + diff).toFixed(2));
+  account.history.push({
+    type: "trade",
+    amount: diff,
+    balance: account.balance,
+    note: `Trade updated (adjustment)`,
+    tradeId,
+  });
+  await account.save();
+};
+
+module.exports = { getAccount, setupBalance, deposit, withdrawal, applyTradePnL,reverseTradePnL, adjustTradePnL };

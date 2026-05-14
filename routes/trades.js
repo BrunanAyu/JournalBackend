@@ -1,7 +1,7 @@
 const router  = require("express").Router();
 const protect = require("../middleware/auth");
 const {
-  createTrade, getTrades, getStats, getReview, deleteTrade,
+  createTrade, getTrades, getStats, getReview, deleteTrade,updateTrade ,
 } = require("../controllers/tradeController");
 
 // All routes require JWT
@@ -12,5 +12,6 @@ router.get("/",         getTrades);
 router.get("/stats",    getStats);
 router.get("/review",   getReview);
 router.delete("/:id",   deleteTrade);
+router.put("/:id", updateTrade); // add this line
 
 module.exports = router;

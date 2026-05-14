@@ -1,5 +1,5 @@
 const Trade = require("../models/Trade");
-const { applyTradePnL } = require("./accountController");
+const { applyTradePnL,reverseTradePnL, adjustTradePnL } = require("./accountController");
 
 // Helper: calculate P&L in USD (approximate)
 const calcPnL = ({ pair, direction, entry, exit, lot }) => {
@@ -96,11 +96,49 @@ const getReview = async (req, res) => {
 // DELETE /api/trades/:id
 const deleteTrade = async (req, res) => {
   try {
-    await Trade.findOneAndDelete({ _id: req.params.id, user: req.user.id });
+    const trade = await Trade.findOne({ _id: req.params.id, user: req.user.id });
+    if (!trade) return res.status(404).json({ message: "Trade not found" });
+
+    await trade.deleteOne();
+
+    // Reverse P&L from account only for realtime trades
+    if (trade.type === "realtime") {
+      await reverseTradePnL(req.user.id, trade.pnl, trade._id);
+    }
+
     res.json({ message: "Trade deleted" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
-module.exports = { createTrade, getTrades, getStats, getReview, deleteTrade };
+const updateTrade = async (req, res) => {
+  try {
+    const old = await Trade.findOne({ _id: req.params.id, user: req.user.id });
+    if (!old) return res.status(404).json({ message: "Trade not found" });
+
+    const oldPnl = old.pnl;
+
+    // Recalculate P&L with new data
+    const updated = { ...old.toObject(), ...req.body };
+    updated.pnl   = calcPnL(updated);
+
+    const trade = await Trade.findByIdAndUpdate(
+      req.params.id,
+      updated,
+      { new: true }
+    );
+
+    // Adjust account balance by the difference (realtime only)
+    if (trade.type === "realtime") {
+      await adjustTradePnL(req.user.id, oldPnl, trade.pnl, trade._id);
+    }
+
+    res.json(trade);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+
+module.exports = { createTrade, getTrades, getStats, getReview, deleteTrade, updateTrade };
